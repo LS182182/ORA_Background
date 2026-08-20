@@ -39,13 +39,13 @@
   header .brand{
     display:inline-flex;
     align-items:center;
-    gap:10px;
-    font-weight:600;
-    letter-spacing:.02em;
-    color:var(--navy);
-    font-size:14px;
-    text-transform:uppercase;
-    margin-bottom:10px;
+    gap:14px;
+    margin-bottom:14px;
+  }
+  header .brand img{
+    height:26px;
+    width:auto;
+    display:block;
   }
   header .brand::before, header .brand::after{
     content:"";
@@ -75,6 +75,21 @@
   }
   @media (max-width:820px){
     main{grid-template-columns:1fr;}
+  }
+  #mobilePreviewSlot{display:none;}
+  #mobilePreviewSlot:empty{display:none !important;}
+  @media (max-width:820px){
+    #mobilePreviewSlot:not(:empty){
+      display:flex;
+      justify-content:center;
+      margin:2px 0 26px;
+    }
+    #mobilePreviewSlot .preview-wrap{
+      position:static;
+    }
+    #mobilePreviewSlot .phone-screen{
+      width:min(200px,52vw);
+    }
   }
   .panel{
     background:var(--card);
@@ -214,6 +229,34 @@
     cursor:not-allowed;
   }
   #downloadBtn:not(:disabled):hover{transform:translateY(-1px);}
+  .linkedin-open-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    width:100%;
+    box-sizing:border-box;
+    padding:10px 16px;
+    margin-bottom:10px;
+    border:1.5px solid var(--navy);
+    border-radius:12px;
+    background:#fff;
+    color:var(--navy);
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    text-decoration:none;
+    cursor:pointer;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .linkedin-open-btn:hover{background:#f2f6fb; transform:translateY(-1px);}
+  .linkedin-open-btn svg{flex-shrink:0;}
+  .linkedin-open-hint{
+    font-size:12px;
+    color:var(--text-muted);
+    margin:0 0 12px;
+    line-height:1.4;
+  }
   .preview-wrap{
     position:sticky;
     top:20px;
@@ -270,7 +313,7 @@
 <body>
 <div class="app">
   <header>
-    <div class="brand">ORAYLIS</div>
+    <div class="brand"><img src="data:image/png;base64,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" alt="ORAYLIS"></div>
     <h1>Dein <b>LinkedIn-Handyhintergrund</b></h1>
     <p>Design wählen, LinkedIn-Link eingeben, fertig ist dein persönlicher Sperrbildschirm mit QR-Code im ORAYLIS-Design.</p>
   </header>
@@ -280,6 +323,7 @@
         <h2><span class="num">1</span>Design wählen</h2>
         <div class="design-grid" id="designGrid"></div>
       </div>
+      <div id="mobilePreviewSlot"></div>
       <div class="step">
         <h2><span class="num">2</span>Position des QR-Codes</h2>
         <div class="segmented" id="positionSegmented">
@@ -290,6 +334,11 @@
       </div>
       <div class="step">
         <h2><span class="num">3</span>Dein LinkedIn-Profil</h2>
+        <a href="https://www.linkedin.com/in/me/" target="_blank" rel="noopener noreferrer" class="linkedin-open-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.03-1.85-3.03-1.85 0-2.14 1.45-2.14 2.94v5.66H9.36V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45z"/></svg>
+          Mein LinkedIn-Profil öffnen
+        </a>
+        <p class="linkedin-open-hint">Öffnet dein eigenes Profil in der LinkedIn-App (falls installiert). Dort auf <b>Teilen</b> bzw. <b>„…" → „Link zum Profil kopieren"</b> tippen und den Link unten einfügen.</p>
         <input type="url" id="linkedinInput" placeholder="https://www.linkedin.com/in/dein-name" autocomplete="off">
         <p class="hint" id="linkedinHint">Öffne dein LinkedIn-Profil, kopiere die Adresse aus der Adresszeile und füge sie hier ein.</p>
       </div>
@@ -352,8 +401,8 @@
   var NAME_GAP_FRACTION = 0.045;  // gap below box before name text, fraction of canvas height
   // Name font size, as a fraction of canvas width. Three proportional steps
   // so "Klein/Mittel/Groß" reads as a clear, evenly-spaced scale. On the
-  // 1080px-wide backgrounds this is roughly 40px / 51px / 64px.
-  var NAME_FONT_FRACTIONS = { klein: 0.037, mittel: 0.047, gross: 0.059 };
+  // 1080px-wide backgrounds this is roughly 54px / 69px / 86px.
+  var NAME_FONT_FRACTIONS = { klein: 0.050, mittel: 0.064, gross: 0.080 };
   var NAME_MAX_WIDTH_FRACTION = 0.88; // auto-shrink long names to fit within this width
 
   var GRADIENT_COLORS = [
@@ -677,6 +726,32 @@
   buildNameSizeButtons();
   updateLinkedinHint();
   scheduleRender();
+
+  // Auf schmalen Bildschirmen die Live-Vorschau direkt nach Schritt 1
+  // anzeigen, statt sie erst ganz unten (nach allen Schritten) einzublenden.
+  var mainEl = document.querySelector("main");
+  var previewWrap = document.querySelector(".preview-wrap");
+  var mobilePreviewSlot = document.getElementById("mobilePreviewSlot");
+  var mobileMq = window.matchMedia("(max-width: 820px)");
+
+  function placePreview(isMobile){
+    if(isMobile){
+      if(previewWrap.parentElement !== mobilePreviewSlot){
+        mobilePreviewSlot.appendChild(previewWrap);
+      }
+    } else {
+      if(previewWrap.parentElement !== mainEl){
+        mainEl.appendChild(previewWrap);
+      }
+    }
+  }
+
+  placePreview(mobileMq.matches);
+  if(typeof mobileMq.addEventListener === "function"){
+    mobileMq.addEventListener("change", function(e){ placePreview(e.matches); });
+  } else if(typeof mobileMq.addListener === "function"){
+    mobileMq.addListener(function(e){ placePreview(e.matches); });
+  }
 })();
 </script>
 </body>
