@@ -224,11 +224,67 @@
     cursor:pointer;
     transition:opacity .15s ease, transform .1s ease;
   }
-  #downloadBtn:disabled{
-    opacity:.4;
-    cursor:not-allowed;
+  #downloadBtn.not-ready{opacity:.55;}
+  #downloadBtn.busy{opacity:.7;cursor:progress;}
+  #downloadBtn:not(.not-ready):not(.busy):hover{transform:translateY(-1px);}
+  [hidden]{display:none !important;}
+  .download-msg{
+    margin:10px 0 0;
+    font-size:13px;
+    line-height:1.45;
+    padding:9px 12px;
+    border-radius:10px;
   }
-  #downloadBtn:not(:disabled):hover{transform:translateY(-1px);}
+  .download-msg.error{background:#fdecef;color:var(--red);border:1px solid #f3c1ca;}
+  .download-msg.info{background:#f2f6fb;color:var(--navy);border:1px solid #dde6f2;}
+  .download-msg.ok{background:#eaf6ee;color:#127a3d;border:1px solid #bfe3cb;}
+  .browser-hint{
+    margin:10px 0 0;
+    font-size:12.5px;
+    line-height:1.45;
+    padding:9px 12px;
+    border-radius:10px;
+    background:#f2f6fb;
+    border:1px solid #dde6f2;
+    color:var(--navy);
+  }
+  .result-box{
+    margin-top:14px;
+    padding:14px;
+    border:1.5px solid #dde6f2;
+    border-radius:14px;
+    background:#fff;
+    text-align:center;
+  }
+  .result-box .result-title{margin:0 0 4px;font-weight:600;font-size:14px;color:var(--navy);}
+  .result-box .result-text{margin:0 0 10px;font-size:12.5px;line-height:1.45;color:var(--text-muted);}
+  .result-box img{
+    display:block;
+    margin:0 auto 12px;
+    width:170px;
+    max-width:60%;
+    height:auto;
+    border-radius:14px;
+    box-shadow:0 4px 16px rgba(10,20,40,.18);
+    -webkit-touch-callout:default;
+    -webkit-user-select:auto;
+    user-select:auto;
+  }
+  .result-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .result-actions button,.result-actions a{
+    flex:1 1 140px;
+    box-sizing:border-box;
+    padding:10px 12px;
+    border:1.5px solid var(--navy);
+    border-radius:10px;
+    background:#fff;
+    color:var(--navy);
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:600;
+    text-decoration:none;
+    cursor:pointer;
+  }
   .linkedin-open-btn{
     display:flex;
     align-items:center;
@@ -339,7 +395,7 @@
           Mein LinkedIn-Profil öffnen
         </a>
         <p class="linkedin-open-hint">Öffnet dein eigenes Profil in der LinkedIn-App (falls installiert). Dort auf <b>Teilen</b> bzw. <b>„…" → „Link zum Profil kopieren"</b> tippen und den Link unten einfügen.</p>
-        <input type="url" id="linkedinInput" placeholder="https://www.linkedin.com/in/dein-name" autocomplete="off">
+        <input type="url" id="linkedinInput" placeholder="https://www.linkedin.com/in/dein-name" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url">
         <p class="hint" id="linkedinHint">Öffne dein LinkedIn-Profil, kopiere die Adresse aus der Adresszeile und füge sie hier ein.</p>
       </div>
       <div class="step">
@@ -352,7 +408,18 @@
         </div>
       </div>
       <div class="step">
-        <button id="downloadBtn" disabled>Hintergrund herunterladen</button>
+        <button type="button" id="downloadBtn" class="not-ready">Hintergrund herunterladen</button>
+        <p class="download-msg" id="downloadMsg" role="status" aria-live="polite" hidden></p>
+        <p class="browser-hint" id="browserHint" hidden></p>
+        <div class="result-box" id="resultBox" hidden>
+          <p class="result-title">Dein Hintergrund ist fertig</p>
+          <p class="result-text" id="resultText"></p>
+          <img id="resultImg" alt="Dein ORAYLIS Handyhintergrund (zum Speichern gedrückt halten)">
+          <div class="result-actions">
+            <button type="button" id="shareBtn" hidden>Teilen / Speichern …</button>
+            <a id="resultDownload" href="#" download="oraylis-handyhintergrund.png">Datei laden</a>
+          </div>
+        </div>
         <p class="privacy-note">🔒 Alles läuft nur in deinem Browser: Dein LinkedIn-Link und dein Name werden nirgendwo gespeichert oder übertragen.</p>
       </div>
     </div>
@@ -480,7 +547,7 @@
   }
 
   function getImage(bg){
-    return new Promise(function(resolve){
+    return new Promise(function(resolve, reject){
       if(loadedImages[bg.id]){
         resolve(loadedImages[bg.id]);
         return;
@@ -490,24 +557,45 @@
         loadedImages[bg.id] = img;
         resolve(img);
       };
+      img.onerror = function(){
+        reject(new Error("Hintergrundbild konnte nicht geladen werden"));
+      };
       img.src = bg.src;
     });
   }
 
+  // Liest einen LinkedIn-Link tolerant ein: akzeptiert Links mit und ohne
+  // "https://", mit "www."/Länder-Subdomain (de.linkedin.com), Kurzlinks
+  // (lnkd.in) und sogar Text, in dem ein Link steckt (z. B. aus der Teilen-
+  // Funktion der LinkedIn-App). Tracking-Parameter (?utm_...) und #-Anker
+  // werden entfernt. Gibt die bereinigte URL zurück oder null.
+  var LINKEDIN_URL_RE = /(?:^|[\s(<\[:,;"'])((?:https?:\/\/)?(?:[a-z0-9-]+\.)*(?:linkedin\.com|lnkd\.in)\/[^\s<>"']+)/i;
+
+  function parseLinkedinUrl(value){
+    if(!value) return null;
+    var m = String(value).replace(/[\u200B-\u200D\uFEFF]/g, "").match(LINKEDIN_URL_RE);
+    if(!m) return null;
+    var v = m[1].replace(/[.,;:!?)\]]+$/, "");
+    if(!/^https?:\/\//i.test(v)){ v = "https://" + v; }
+    try{
+      var u = new URL(v);
+      if(u.protocol !== "https:" && u.protocol !== "http:") return null;
+      if(!/(^|\.)(linkedin\.com|lnkd\.in)$/i.test(u.hostname)) return null;
+      if(!u.pathname || u.pathname === "/") return null;
+      u.search = "";
+      u.hash = "";
+      return u.toString();
+    } catch(e){
+      return null;
+    }
+  }
+
   function isValidLinkedinUrl(value){
-    if(!value) return false;
-    var v = value.trim();
-    if(!/^https?:\/\//i.test(v)) return false;
-    if(!/linkedin\.com/i.test(v)) return false;
-    return true;
+    return parseLinkedinUrl(value) !== null;
   }
 
   function normalizeUrl(value){
-    var v = value.trim();
-    if(!/^https?:\/\//i.test(v)){
-      v = "https://" + v;
-    }
-    return v;
+    return parseLinkedinUrl(value) || String(value).trim();
   }
 
   function drawRoundedRect(context, x, y, w, h, r){
@@ -552,39 +640,86 @@
   // rather than guessing with a fixed timeout. This avoids stale/late
   // draws landing on the wrong (previous) position.
   function renderQr(size, data){
-    var inst = ensureQrInstance(size);
-    inst.update({ width: size, height: size, data: data });
-    return inst.getRawData("png").then(function(blob){
-      if(!blob) return null;
-      return new Promise(function(resolve){
-        var url = URL.createObjectURL(blob);
-        var img = new Image();
-        img.onload = function(){
-          URL.revokeObjectURL(url);
-          resolve(img);
-        };
-        img.onerror = function(){
-          URL.revokeObjectURL(url);
-          resolve(null);
-        };
-        img.src = url;
+    var task;
+    try{
+      var inst = ensureQrInstance(size);
+      inst.update({ width: size, height: size, data: data });
+      task = inst.getRawData("png").then(function(blob){
+        if(!blob) return null;
+        return new Promise(function(resolve){
+          var url = URL.createObjectURL(blob);
+          var img = new Image();
+          img.onload = function(){
+            URL.revokeObjectURL(url);
+            resolve(img);
+          };
+          img.onerror = function(){
+            URL.revokeObjectURL(url);
+            resolve(null);
+          };
+          img.src = url;
+        });
       });
-    });
+    } catch(e){
+      return Promise.resolve(null);
+    }
+    // Sicherheitsnetz: der Ablauf darf nie hängen bleiben
+    var timeout = new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 6000); });
+    return Promise.race([task.catch(function(){ return null; }), timeout]);
   }
 
   var renderPending = false;
   var renderQueued = false;
 
+  var renderWaiters = [];
+  var lastRender = { ok: false, validLink: false, qrOk: false, key: "" };
+
   function scheduleRender(){
     if(renderPending){ renderQueued = true; return; }
     renderPending = true;
-    doRender().then(function(){
+    doRender().catch(function(err){
+      lastRender = { ok: false, validLink: false, qrOk: false, key: "", error: err };
+      try{ console.error(err); }catch(e){}
+    }).then(function(){
       renderPending = false;
       if(renderQueued){
         renderQueued = false;
         scheduleRender();
+        return;
       }
+      var waiters = renderWaiters;
+      renderWaiters = [];
+      waiters.forEach(function(fn){ fn(); });
     });
+  }
+
+  // Rendert sofort mit dem aktuellen Eingabestand und wartet, bis die
+  // Zeichnung fertig ist (max. 8 s, damit nie etwas hängen bleibt).
+  function renderNow(){
+    clearTimeout(debounceTimer);
+    syncStateFromInputs();
+    return new Promise(function(resolve){
+      var done = false;
+      function finish(){ if(!done){ done = true; resolve(); } }
+      setTimeout(finish, 8000);
+      renderWaiters.push(finish);
+      if(renderPending){ renderQueued = true; } else { scheduleRender(); }
+    });
+  }
+
+  var fontPromise = null;
+  function fontsReady(){
+    if(!fontPromise){
+      var load = (document.fonts && document.fonts.load)
+        ? Promise.all([
+            document.fonts.load("300 50px 'Poppins'"),
+            document.fonts.load("500 50px 'Poppins'")
+          ]).catch(function(){})
+        : Promise.resolve();
+      var t = new Promise(function(resolve){ setTimeout(resolve, 2500); });
+      fontPromise = Promise.race([load, t]);
+    }
+    return fontPromise;
   }
 
   // Renders a full frame. IMPORTANT: every async resource (background image,
@@ -598,13 +733,15 @@
     var nameValue = state.name;
     var nameSizeValue = state.nameSize;
     var positionValue = state.position;
-    var validLink = isValidLinkedinUrl(linkedinValue);
+    var cleanUrl = parseLinkedinUrl(linkedinValue);
+    var validLink = cleanUrl !== null;
 
-    return getImage(bg).then(function(img){
+    return Promise.all([getImage(bg), fontsReady()]).then(function(res){
+      var img = res[0];
       var boxSize = img.naturalWidth * QR_BOX_FRACTION;
       var qrSize = Math.round(boxSize * QR_INNER_FRACTION);
       var qrTask = validLink
-        ? renderQr(qrSize, normalizeUrl(linkedinValue))
+        ? renderQr(qrSize, cleanUrl)
         : Promise.resolve(null);
 
       return qrTask.then(function(qrImg){
@@ -686,9 +823,25 @@
           ctx.restore();
         }
 
-        downloadBtn.disabled = !validLink;
+        lastRender = {
+          ok: true,
+          validLink: validLink,
+          qrOk: !!qrImg,
+          key: makeKey(bg.id, positionValue, cleanUrl, nameValue, nameSizeValue),
+          url: cleanUrl
+        };
+        cachedBlob = null;
+        if(validLink && qrImg){ prepareBlob(lastRender.key); }
+        updateButtonState();
       });
     });
+  }
+
+  function makeKey(designId, position, cleanUrl, name, nameSize){
+    return [designId, position, cleanUrl || "", String(name).trim(), nameSize].join("|");
+  }
+  function currentKey(){
+    return makeKey(state.designId, state.position, parseLinkedinUrl(state.linkedin), state.name, state.nameSize);
   }
 
 
@@ -700,9 +853,10 @@
       linkedinHint.className = "hint";
       return;
     }
-    if(isValidLinkedinUrl(v)){
+    var clean = parseLinkedinUrl(v);
+    if(clean){
       linkedinInput.classList.remove("invalid");
-      linkedinHint.textContent = "Sieht gut aus.";
+      linkedinHint.textContent = "Sieht gut aus. Der QR-Code führt zu: " + clean.replace(/^https?:\/\//i, "");
       linkedinHint.className = "hint ok";
     } else {
       linkedinInput.classList.add("invalid");
@@ -711,33 +865,299 @@
     }
   }
 
-  var debounceTimer = null;
-  function onInputChange(){
+  function syncStateFromInputs(){
     state.linkedin = linkedinInput.value;
     state.name = nameInput.value;
+  }
+
+  var debounceTimer = null;
+  function onInputChange(){
+    syncStateFromInputs();
     updateLinkedinHint();
+    clearMessage();
+    updateButtonState();
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(scheduleRender, 120);
   }
 
-  linkedinInput.addEventListener("input", onInputChange);
-  nameInput.addEventListener("input", onInputChange);
+  // Manche mobile Tastaturen / Autofill-Vorschläge / Einfügen-Menüs lösen
+  // nicht in jedem Fall "input" aus - deshalb mehrere Ereignisse abdecken.
+  ["input", "change", "keyup", "blur"].forEach(function(evt){
+    linkedinInput.addEventListener(evt, onInputChange);
+    nameInput.addEventListener(evt, onInputChange);
+  });
+  ["paste", "cut", "drop"].forEach(function(evt){
+    linkedinInput.addEventListener(evt, function(){ setTimeout(onInputChange, 0); });
+    nameInput.addEventListener(evt, function(){ setTimeout(onInputChange, 0); });
+  });
+
+  // ---------------------------------------------------------------
+  // Umgebung erkennen (nur für Hinweise / Wahl des Speicherwegs)
+  // ---------------------------------------------------------------
+  var UA = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/i.test(UA);
+  var isInApp = /FBAN|FBAV|Instagram|LinkedInApp|MicrosoftTeams|Teams\/|Outlook|WhatsApp|Line\/|Snapchat|TikTok|; wv\)|GSA\/|Slack|Messenger/i.test(UA);
+  var isTouchDevice = isIOS || isAndroid || (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+
+  var downloadMsg = document.getElementById("downloadMsg");
+  var browserHint = document.getElementById("browserHint");
+  var resultBox = document.getElementById("resultBox");
+  var resultText = document.getElementById("resultText");
+  var resultImg = document.getElementById("resultImg");
+  var resultDownload = document.getElementById("resultDownload");
+  var shareBtn = document.getElementById("shareBtn");
+
+  function showMessage(text, kind){
+    downloadMsg.textContent = text;
+    downloadMsg.className = "download-msg " + (kind || "info");
+    downloadMsg.hidden = false;
+  }
+  function clearMessage(){
+    downloadMsg.hidden = true;
+    downloadMsg.textContent = "";
+  }
+
+  function updateButtonState(){
+    var ok = parseLinkedinUrl(linkedinInput.value) !== null;
+    downloadBtn.classList.toggle("not-ready", !ok);
+  }
+
+  // Hinweise für Browser, die Downloads oder Canvas-Auslesen einschränken
+  var braveDetected = false;
+  function setBrowserHint(){
+    var text = "";
+    if(braveDetected){
+      text = "Du nutzt den Brave-Browser: Brave blockiert standardmäßig das Auslesen von Bildern (Fingerprinting-Schutz). Falls der Download nicht klappt: Tippe auf das Brave-Symbol in der Adressleiste, schalte die Shields für diese Seite aus bzw. „Fingerprinting blockieren“ auf „Deaktiviert“ und lade die Seite neu.";
+    } else if(isInApp){
+      text = "Du nutzt gerade einen In-App-Browser (z. B. aus Teams, Outlook, LinkedIn oder WhatsApp). Dort sind Downloads oft gesperrt. Tipp: Seite über das Menü (⋯) in Safari bzw. Chrome öffnen.";
+    }
+    if(text){
+      browserHint.textContent = text;
+      browserHint.hidden = false;
+    }
+  }
+  try{
+    if(navigator.brave && typeof navigator.brave.isBrave === "function"){
+      navigator.brave.isBrave().then(function(r){
+        if(r){ braveDetected = true; setBrowserHint(); }
+      }).catch(function(){});
+    }
+  } catch(e){}
+  setBrowserHint();
+
+  // ---------------------------------------------------------------
+  // PNG erzeugen + speichern
+  // ---------------------------------------------------------------
+  var cachedBlob = null;   // { key, blob }
+
+  function dataUrlToBlob(dataUrl){
+    var parts = dataUrl.split(",");
+    var mime = (parts[0].match(/:(.*?);/) || [null, "image/png"])[1];
+    var bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for(var i = 0; i < bin.length; i++){ arr[i] = bin.charCodeAt(i); }
+    return new Blob([arr], { type: mime });
+  }
+
+  function canvasToBlob(){
+    return new Promise(function(resolve, reject){
+      var settled = false;
+      function done(b){
+        if(settled) return;
+        settled = true;
+        if(b && b.size > 1000){ resolve(b); } else { reject(new Error("Canvas lieferte kein Bild")); }
+      }
+      try{
+        if(canvas.toBlob){
+          canvas.toBlob(function(b){
+            if(b){ done(b); return; }
+            // Fallback über toDataURL
+            try{ done(dataUrlToBlob(canvas.toDataURL("image/png"))); }
+            catch(e){ settled = true; reject(e); }
+          }, "image/png");
+          setTimeout(function(){
+            if(!settled){
+              try{ done(dataUrlToBlob(canvas.toDataURL("image/png"))); }
+              catch(e){ settled = true; reject(e); }
+            }
+          }, 6000);
+        } else {
+          done(dataUrlToBlob(canvas.toDataURL("image/png")));
+        }
+      } catch(e){
+        settled = true;
+        reject(e);
+      }
+    });
+  }
+
+  // Bild schon vorab im Hintergrund erzeugen: Der Tipp auf "Herunterladen"
+  // kann dann sofort (innerhalb der Nutzer-Geste) teilen/speichern - das ist
+  // auf iPhones Voraussetzung für das Teilen-Menü.
+  function prepareBlob(key){
+    canvasToBlob().then(function(b){
+      if(lastRender.key === key){ cachedBlob = { key: key, blob: b }; }
+    }).catch(function(){});
+  }
+
+  function fileName(){
+    var n = state.name.trim();
+    var part = n ? n.toLowerCase()
+      .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+      .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "";
+    return "oraylis-handyhintergrund-" + (part || "linkedin") + ".png";
+  }
+
+  var currentObjectUrl = null;
+
+  function triggerDownload(blob, name){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      if(a.parentNode) a.parentNode.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 60000);
+  }
+
+  function makeFile(blob, name){
+    try{ return new File([blob], name, { type: "image/png" }); }
+    catch(e){ return null; }
+  }
+
+  function canShareFile(file){
+    try{
+      return !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch(e){ return false; }
+  }
+
+  function showResultBox(blob, name, introText){
+    if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); }
+    currentObjectUrl = URL.createObjectURL(blob);
+    resultImg.src = currentObjectUrl;
+    resultDownload.href = currentObjectUrl;
+    resultDownload.setAttribute("download", name);
+    resultText.textContent = introText;
+    var file = makeFile(blob, name);
+    shareBtn.hidden = !canShareFile(file);
+    shareBtn.onclick = function(){
+      var f = makeFile(blob, name);
+      if(!canShareFile(f)) return;
+      navigator.share({ files: [f], title: "ORAYLIS Handyhintergrund" }).catch(function(){});
+    };
+    resultBox.hidden = false;
+    try{ resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch(e){}
+  }
+
+  var saveInProgress = false;
+
+  function saveBlob(blob){
+    var name = fileName();
+    var file = makeFile(blob, name);
+    var showBox = isTouchDevice || isInApp || window.innerWidth <= 820;
+    var longPressText = isIOS
+      ? "Falls kein Speichern-Dialog erschienen ist: Bild unten gedrückt halten und „Zu Fotos hinzufügen“ wählen. Danach in den iPhone-Einstellungen unter „Hintergrundbild“ auswählen."
+      : "Falls kein Download gestartet ist: Bild unten gedrückt halten und „Bild speichern“ bzw. „Bild herunterladen“ wählen, oder „Datei laden“ tippen.";
+
+    // iPhone/iPad und In-App-Browser ignorieren Downloads häufig - dort
+    // zuerst das Teilen-Menü (Bild sichern / In Fotos speichern) nutzen.
+    if((isIOS || isInApp) && canShareFile(file)){
+      showResultBox(blob, name, longPressText);
+      return navigator.share({ files: [file], title: "ORAYLIS Handyhintergrund" }).then(function(){
+        showMessage("Gespeichert bzw. geteilt. Prüfe deine Fotos/Dateien.", "ok");
+      }).catch(function(err){
+        if(err && err.name === "AbortError"){
+          showMessage("Abgebrochen. Du kannst es jederzeit erneut versuchen oder das Bild unten gedrückt halten.", "info");
+        } else {
+          showMessage("Das Teilen-Menü ließ sich nicht öffnen. Tippe unten auf „Teilen / Speichern …“ oder halte das Bild gedrückt.", "info");
+        }
+      });
+    }
+
+    triggerDownload(blob, name);
+    if(showBox){
+      showResultBox(blob, name, longPressText);
+      showMessage("Download gestartet. " + (isInApp ? "In diesem Browser kann er blockiert sein – nutze dann das Bild unten." : "Du findest die Datei in deinen Downloads bzw. Fotos."), "ok");
+    } else {
+      showMessage("Download gestartet.", "ok");
+    }
+    return Promise.resolve();
+  }
+
+  function failMessage(err){
+    try{ console.error(err); }catch(e){}
+    var text = "Das Bild konnte nicht erzeugt werden.";
+    if(braveDetected){
+      text += " Brave blockiert vermutlich das Auslesen von Bildern: Shields für diese Seite ausschalten bzw. „Fingerprinting blockieren“ deaktivieren und Seite neu laden.";
+    } else {
+      text += " Bitte Seite neu laden und erneut versuchen, oder einen anderen Browser (z. B. Chrome oder Safari) verwenden.";
+    }
+    showMessage(text, "error");
+  }
 
   downloadBtn.addEventListener("click", function(){
-    if(downloadBtn.disabled) return;
-    var link = document.createElement("a");
-    var namePart = state.name.trim() ? state.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") : "linkedin";
-    link.download = "oraylis-handyhintergrund-" + namePart + ".png";
-    link.href = canvas.toDataURL("image/png");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    if(saveInProgress) return;
+    syncStateFromInputs();
+    updateLinkedinHint();
+    updateButtonState();
+
+    if(!state.linkedin.trim()){
+      showMessage("Bitte füge zuerst deinen LinkedIn-Profil-Link in Schritt 3 ein.", "error");
+      linkedinInput.classList.add("invalid");
+      try{ linkedinInput.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){}
+      try{ linkedinInput.focus({ preventScroll: true }); }catch(e){ linkedinInput.focus(); }
+      return;
+    }
+    if(!parseLinkedinUrl(state.linkedin)){
+      showMessage("Dieser Link sieht nicht nach einem LinkedIn-Link aus. Beispiel: linkedin.com/in/dein-name", "error");
+      try{ linkedinInput.scrollIntoView({ behavior: "smooth", block: "center" }); }catch(e){}
+      try{ linkedinInput.focus({ preventScroll: true }); }catch(e){ linkedinInput.focus(); }
+      return;
+    }
+
+    var key = currentKey();
+    // Schneller Weg: Bild liegt schon bereit und ist aktuell (wichtig für iOS-Teilen-Menü)
+    if(cachedBlob && cachedBlob.key === key && !renderPending && !renderQueued){
+      saveInProgress = true;
+      var p = saveBlob(cachedBlob.blob);
+      Promise.resolve(p).catch(function(err){ failMessage(err); }).then(function(){ saveInProgress = false; });
+      return;
+    }
+
+    // Sonst: erst fertig zeichnen, dann speichern
+    saveInProgress = true;
+    downloadBtn.classList.add("busy");
+    showMessage("Bild wird erstellt …", "info");
+    renderNow().then(function(){
+      if(!lastRender.ok || !lastRender.validLink){
+        throw new Error("Render fehlgeschlagen");
+      }
+      if(!lastRender.qrOk){
+        throw new Error("QR-Code konnte nicht erzeugt werden");
+      }
+      return canvasToBlob();
+    }).then(function(blob){
+      clearMessage();
+      return saveBlob(blob);
+    }).catch(function(err){
+      failMessage(err);
+    }).then(function(){
+      saveInProgress = false;
+      downloadBtn.classList.remove("busy");
+    });
   });
 
   buildDesignGrid();
   buildPositionButtons();
   buildNameSizeButtons();
   updateLinkedinHint();
+  updateButtonState();
   scheduleRender();
 
   // Auf schmalen Bildschirmen die Live-Vorschau direkt nach Schritt 1
